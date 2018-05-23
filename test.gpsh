@@ -1,0 +1,15 @@
+mode_211
+enable_trace
+establish_context
+card_connect
+
+#Wybranie apletu
+#send_apdu -sc 0 -APDU 00A4040007bbbbccddee010100
+select -AID bbbbccddee0101
+
+#Wysłanie komendy CLA=B0, INS=01, P1=00, P2=00, brak danych, spodziewamy się 13 bajtów
+send_apdu -sc 0 -APDU B00100000D
+
+card_disconnect
+release_context
+

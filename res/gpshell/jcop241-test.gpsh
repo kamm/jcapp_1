@@ -1,0 +1,8 @@
+# gpshell script for jcop 2.4.1 applet test
+enable_trace
+establish_context
+card_connect
+select -AID %JAVACARD_APPLET_AID%
+send_apdu -APDU 00A00000
+card_disconnect
+release_context

@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<project default="project-help" basedir=".">
+  <!-- podstawowe ustawienia -->
+  <property environment="env"/>
+  <basename property="ant.project.name" file="${basedir}"/>
+
+  <path id="classpath.jcapi">
+    <pathelement location="${env.JC_HOME}/api_export_files" />
+    <pathelement location="${env.JC_HOME}/lib/javacardframework.jar" />
+    <pathelement location="${env.JC_HOME}/lib/api.jar" />
+    <pathelement location="${env.JC_HOME}/lib/api_classic.jar" /> <!-- 3.0 -->
+  </path>
+
+  <path id="classpath.jctools">
+    <pathelement location="${env.JC_HOME}/lib/converter.jar" />
+    <pathelement location="${env.JC_HOME}/lib/offcardverifier.jar" />
+    <pathelement location="${env.JC_HOME}/lib/scriptgen.jar" />
+    <pathelement location="${env.JC_HOME}/lib/apdutool.jar" />
+    <pathelement location="${env.JC_HOME}/lib/apduio.jar" />
+    <pathelement location="${env.JC_HOME}/lib/tools.jar" /> <!-- 3.0 -->
+  </path>
+
+  <property file="${basedir}/build.properties"/>
+  <property file="${basedir}/version.properties"/>
+
+  <target name="java2cap">
+    <property name="repository.revision" value="current"/>
+    <fail unless="env.JC_HOME" message="Prosze ustawic srodowisko Java Card."/>
+    <property name="build.dir" value="out/${ant.project.name}-${repository.revision}"/>
+    <loadresource property="javacard.applet.aid.clean">
+      <string value="${javacard.applet.aid}"/>
+      <filterchain><replaceregex pattern="[:]*(0x)" replace="" flags="gi"/></filterchain>
+    </loadresource>
+    <loadresource property="javacard.package.aid.clean">
+      <string value="${javacard.package.aid}"/>
+      <filterchain><replaceregex pattern="[:]*(0x)" replace="" flags="gi"/></filterchain>
+    </loadresource>
+    <loadresource property="javacard.applet.aid.clean.hex">
+      <string value="${javacard.applet.aid}"/>
+      <filterchain><replaceregex pattern="[:]" replace=" " flags="gi"/></filterchain>
+    </loadresource>
+
+    <mkdir dir="${build.dir}/bin" />
+
+    <javac srcdir="${src.dir}"
+      destdir="${build.dir}/bin"
+      debug="true"
+      optimize="true"
+      includeantruntime="false"
+      target="1.1"
+      source="1.3">
+      <classpath>
+        <pathelement path="${build.dir}/bin"/>
+      </classpath>
+      <classpath refid="classpath.jcapi" />
+    </javac>
+
+    <!-- konwersja -->
+    <java classname="com.sun.javacard.converter.Converter" fork="true" failonerror="true">
+      <classpath refid="classpath.jcapi" />
+      <classpath refid="classpath.jctools" />
+      <arg value="-verbose" />
+      <arg value="-classdir" />
+      <arg value="${build.dir}/bin/" />
+      <arg value="-out" />
+      <arg value="JCA" />
+      <arg value="CAP" />
+      <arg value="EXP" />
+      <arg value="-applet" />
+      <arg value="${javacard.applet.aid}" />
+      <arg value="${javacard.applet.name}" />
+      <arg value="${javacard.package.name}" />
+      <arg value="${javacard.package.aid}" />
+      <arg value="${javacard.major.version}.${javacard.minor.version}" />
+    </java>
+
+    <!-- kopiowanie -->
+    <copy todir="${build.dir}" flatten="true">
+      <fileset dir="${build.dir}/bin" includes="**/javacard/*.*" />
+      <firstmatchmapper>
+        <globmapper from="*.cap" to="${ant.project.name}.cap"/>
+        <globmapper from="*.exp" to="${ant.project.name}.exp"/>
+        <globmapper from="*.jca" to="${ant.project.name}.jca"/>
+      </firstmatchmapper>
+    </copy>
+
+    <java classname="com.sun.javacard.scriptgen.Main" fork="true">
+      <classpath refid="classpath.jcapi" />
+      <classpath refid="classpath.jctools" />
+      <arg line="-o ${build.dir}/${ant.project.name}-cref.scr
+      ${build.dir}/${ant.project.name}.cap" />
+    </java>
+
+    <!-- kopiowanie skryptów -->
+    <copy todir="${build.dir}" flatten="true" failonerror="false">
+      <fileset dir="${basedir}/res/gpshell" includes="*.gpsh" />
+      <globmapper from="*.gpsh" to="${ant.project.name}-*.gpsh"/>
+      <filterchain id="source.filter">
+        <replacetokens begintoken="%" endtoken="%">
+          <token key="JAVACARD_APPLET_AID" value="${javacard.applet.aid.clean}" />
+          <token key="JAVACARD_PACKAGE_AID" value="${javacard.package.aid.clean}" />
+          <token key="JAVACARD_APPLET_PARAMS" value="${javacard.applet.params}" />
+          <token key="JAVACARD_CAP" value="${ant.project.name}.cap" />
+        </replacetokens>
+      </filterchain>
+    </copy>
+
+    <!-- kopiowanie skryptów cref -->
+    <copy todir="${build.dir}" flatten="true" failonerror="false">
+      <fileset dir="${basedir}/res/cref" includes="*.scr" />
+      <globmapper from="*.scr" to="${ant.project.name}-*.scr"/>
+      <filterchain id="source.filter">
+        <replacetokens begintoken="%" endtoken="%">
+          <token key="JAVACARD_APPLET_AID" value="${javacard.applet.aid.clean.hex}" />
+        </replacetokens>
+      </filterchain>
+    </copy>
+
+  </target>
+
+  <!-- aplet  -->
+  <target name="build" description="build sam java card applet">
+    <antcall target="java2cap">
+      <param name="ant.project.name" value="${ant.project.name}"/>
+      <param name="src.dir" value="${basedir}/src/pl/kamm"/>
+      <param name="javacard.applet.name" value="${javacard.applet.name}"/>
+      <param name="javacard.package.name" value="${javacard.package.name}"/>
+      <param name="javacard.major.version" value="${javacard.major.version}"/>
+      <param name="javacard.minor.version" value="${javacard.minor.version}"/>
+      <param name="javacard.applet.aid" value="${javacard.applet.aid}"/>
+      <param name="javacard.package.aid" value="${javacard.package.aid}"/>
+      <param name="javacard.applet.params" value="${javacard.applet.params}"/>
+    </antcall>
+  </target>
+
+  <target name="release" description="release sam java card applet"
+    depends="clean, build">
+    <property name="repository.revision" value="current"/>
+    <zip destfile="${ant.project.name}-${repository.revision}.zip" >
+      <fileset dir="out/${ant.project.name}-${repository.revision}"
+      excludes="bin/** *.jca" />
+      <fileset dir="${env.GPSHELL_HOME}" includes="*.exe *.dll" />
+    </zip>
+  </target>
+
+  <target name="clean" description="clean sam java card applet build">
+    <property name="repository.revision" value="current"/>
+    <delete dir="out/${ant.project.name}-${repository.revision}"
+      includeemptydirs="true" failonerror="false" />
+  </target>
+
+  <!-- przygotowanie paczki z kodami źródłowymi -->
+  <target name="release-src" description="release project sources" >
+    <property name="repository.revision" value="current"/>
+    <zip destfile="${ant.project.name}-src-${repository.revision}.zip" >
+      <zipfileset dir="${basedir}"
+        excludes="nbproject/** out/** nbbuild.xml manifest.mf"
+        prefix="${ant.project.name}" />
+    </zip>
+    </target>
+
+  <!-- zaladowanie apletu do cref -->
+  <target name="load" description="load java card applet into cref">
+    <property name="repository.revision" value="current"/>
+    <property name="build.dir" value="out/${ant.project.name}-${repository.revision}"/>
+    <java classname="com.sun.javacard.apdutool.Main" fork="true">
+      <classpath refid="classpath.jcapi" />
+      <classpath refid="classpath.jctools" />
+      <arg line="${build.dir}/${ant.project.name}-cref-startload.scr
+        ${build.dir}/${ant.project.name}-cref.scr
+        ${build.dir}/${ant.project.name}-cref-create.scr
+        ${build.dir}/${ant.project.name}-cref-endsession.scr" />
+    </java>
+  </target>
+  
+  <!-- zaladowanie apletu na karte -->
+  <target name="loadcard" description="load java card applet into card">
+    <property name="repository.revision" value="current"/>
+    <property name="build.dir" value="out/${ant.project.name}-${repository.revision}"/>
+    <exec executable="gpshell" dir="${build.dir}">
+      <arg value="${ant.project.name}-jcop241-load.gpsh"/>
+    </exec>
+  </target>
+
+  <!--uruchomienie skryptu testowego -->
+  <target name="testcard" description="execute test command on applet">
+    <exec executable="gpshell" dir="${basedir}">
+      <arg value="test.gpsh"/>
+    </exec>
+  </target>
+
+	
+
+  <!-- informacja o pakiecie -->
+  <target name="project-help" >
+    <java classname="org.apache.tools.ant.Main">
+      <arg value="-projecthelp" />
+    </java>
+  </target>
+</project>
+
